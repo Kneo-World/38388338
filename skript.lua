@@ -1,100 +1,81 @@
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
-local LUGER_ID = "rbxassetid://3187399148"
-local DEATHSHARD_ID = "rbxassetid://3175017717"
+-- Точні Asset ID для Luger та Deathshard
+local SKINS = {
+    Gun = {
+        MeshId = "rbxassetid://3187399148",
+        TextureId = "rbxassetid://3187399222" -- Окрема текстура Luger
+    },
+    Knife = {
+        MeshId = "rbxassetid://3175017717",
+        TextureId = "rbxassetid://3175017804" -- Окрема текстура Deathshard
+    }
+}
 
-print("[MM2-DEBUG] Скрипт логування запущено для:", LocalPlayer.Name)
+local function applyMeshAndTexture(part, skinData)
+    if not part then return end
 
-local function patchModel(model, skinType)
-    if not model then 
-        print("[MM2-DEBUG] ❌ Спроба пропатчити nil модель!")
-        return 
-    end
-
-    local meshId = (skinType == "Gun") and LUGER_ID or DEATHSHARD_ID
-    print(string.format("[MM2-DEBUG] ⚙️ Патчимо об'єкт: %s (Тип: %s, Skin: %s)", model.Name, model.ClassName, skinType))
-
-    local count = 0
-    for _, desc in ipairs(model:GetDescendants()) do
-        count = count + 1
-        print(string.format("[MM2-DEBUG]   ├── Елемент #%d: %s [%s]", count, desc.Name, desc.ClassName))
-
-        if desc:IsA("SpecialMesh") then
-            print(string.format("[MM2-DEBUG]   │   ├── Змінюємо SpecialMesh. Старий MeshId: %s", tostring(desc.MeshId)))
-            desc.MeshId = meshId
-            desc.TextureId = meshId
-            print("[MM2-DEBUG]   │   └── ✅ SpecialMesh успішно оновлено!")
-            
-        elseif desc:IsA("MeshPart") then
-            print(string.format("[MM2-DEBUG]   │   ├── Знайдено MeshPart. Старий MeshID: %s", tostring(desc.MeshID)))
-            desc.MeshId = meshId
-            desc.TextureID = meshId
-            print("[MM2-DEBUG]   │   └── ✅ MeshPart успішно оновлено!")
-            
-        elseif desc:IsA("SurfaceAppearance") then
-            print("[MM2-DEBUG]   │   ├── Знайдено SurfaceAppearance, видаляємо для скидання текстури...")
-            desc:Destroy()
-            print("[MM2-DEBUG]   │   └── 🗑️ SurfaceAppearance видалено.")
+    local function patch(obj)
+        if obj:IsA("SpecialMesh") then
+            obj.MeshId = skinData.MeshId
+            obj.TextureId = skinData.TextureId
+        elseif obj:IsA("MeshPart") then
+            obj.MeshId = skinData.MeshId
+            obj.TextureID = skinData.TextureId
         end
 
-        if desc:IsA("BasePart") or desc:IsA("Decal") then
-            local oldMod = desc.LocalTransparencyModifier
-            desc.LocalTransparencyModifier = 0
-            desc.Transparency = 0
-            print(string.format("[MM2-DEBUG]   │   └── 👁️ Прозорість скинута на 0 (Була LocalTransparencyModifier: %s)", tostring(oldMod)))
+        if obj:IsA("BasePart") or obj:IsA("Decal") then
+            obj.LocalTransparencyModifier = 0
+            obj.Transparency = 0
         end
     end
-    print(string.format("[MM2-DEBUG] 🏁 Обробку %s завершено. Всього елементів: %d", model.Name, count))
+
+    patch(part)
+    for _, desc in ipairs(part:GetDescendants()) do
+        patch(desc)
+    end
+end
+
+local function handleTarget(child)
+    if child:IsA("ObjectValue") and child.Value then
+        if child.Name == "DisplayRefKnife" then
+            applyMeshAndTexture(child.Value, SKINS.Knife)
+        elseif child.Name == "DisplayRefGun" then
+            applyMeshAndTexture(child.Value, SKINS.Gun)
+        end
+    elseif child:IsA("Tool") then
+        local name = child.Name:lower()
+        if name:find("knife") or child:HasTag("Weapon_Knife") then
+            applyMeshAndTexture(child, SKINS.Knife)
+        elseif name:find("gun") or name:find("revolver") or child:HasTag("Weapon_Gun") then
+            applyMeshAndTexture(child, SKINS.Gun)
+        end
+    end
 end
 
 local function setupCharacter(char)
-    print("[MM2-DEBUG] 👤 Підключено нового персонажа:", char.Name)
-
-    -- Відстеження DisplayRefObjects (спина/пояс)
-    char.ChildAdded:Connect(function(child)
-        print("[MM2-DEBUG] ➕ Додано новий Child у персонажа:", child.Name, "| Class:", child.ClassName)
-
-        if child:IsA("ObjectValue") then
-            print(string.format("[MM2-DEBUG] 🔗 Знайдено ObjectValue: %s | Посилання Value: %s", child.Name, tostring(child.Value)))
-            
-            if child.Name == "DisplayRefKnife" and child.Value then
-                patchModel(child.Value, "Knife")
-            elseif child.Name == "DisplayRefGun" and child.Value then
-                patchModel(child.Value, "Gun")
-            end
-
-            child:GetPropertyChangedSignal("Value"):Connect(function()
-                print(string.format("[MM2-DEBUG] 🔄 Змінилося Value у %s -> %s", child.Name, tostring(child.Value)))
-                if child.Value then
-                    local skinType = (child.Name == "DisplayRefGun") and "Gun" or "Knife"
-                    patchModel(child.Value, skinType)
-                end
-            end)
-
-        elseif child:IsA("Tool") then
-            print("[MM2-DEBUG] 🗡️ Знайдено Tool у руках:", child.Name)
-            local skinType = (child.Name:lower():find("gun") or child.Name:lower():find("revolver")) and "Gun" or "Knife"
-            patchModel(child, skinType)
-        end
-    end)
-
-    -- Перевірка вже існуючих частин
+    -- Стежимо за DisplayRef та інструментами в персонажі
+    char.ChildAdded:Connect(handleTarget)
     for _, child in ipairs(char:GetChildren()) do
-        if child:IsA("ObjectValue") and child.Value then
-            print("[MM2-DEBUG] 🔍 Знайдено існуючий ObjectValue:", child.Name, "Value:", child.Value.Name)
-            local skinType = (child.Name == "DisplayRefGun") and "Gun" or "Knife"
-            patchModel(child.Value, skinType)
-        elseif child:IsA("Tool") then
-            print("[MM2-DEBUG] 🔍 Знайдено існуючий Tool:", child.Name)
-            local skinType = (child.Name:lower():find("gun") or child.Name:lower():find("revolver")) and "Gun" or "Knife"
-            patchModel(child, skinType)
-        end
+        handleTarget(child)
     end
 end
 
-if LocalPlayer.Character then
-    setupCharacter(LocalPlayer.Character)
+-- Стежимо за інвентарем (Backpack)
+local function setupBackpack(bp)
+    bp.ChildAdded:Connect(handleTarget)
+    for _, child in ipairs(bp:GetChildren()) do
+        handleTarget(child)
+    end
 end
 
+if LocalPlayer.Character then setupCharacter(LocalPlayer.Character) end
+if LocalPlayer:FindFirstChild("Backpack") then setupBackpack(LocalPlayer.Backpack) end
+
 LocalPlayer.CharacterAdded:Connect(setupCharacter)
+LocalPlayer.ChildAdded:Connect(function(child)
+    if child.Name == "Backpack" then
+        setupBackpack(child)
+    end
+end)
