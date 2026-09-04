@@ -4,7 +4,7 @@ local Workspace = game:GetService("Workspace")
 
 local LocalPlayer = Players.LocalPlayer
 
-print("=== [SKIN CHANGER] Глубокое сканирование и подмена ===")
+print("=== [SKIN CHANGERrrr] Глубокое сканирование и подмена ===")
 
 -- База данных скинов (MeshId и TextureId)
 local WeaponDatabase = {
