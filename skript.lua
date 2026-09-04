@@ -1,9 +1,6 @@
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
--- Зберігаємо вже оброблені об'єкти, щоб уникнути зациклення з логів
-local processed = {}
-
 local SKINS = {
     Gun = {
         MeshId = "rbxassetid://3187399148",
@@ -15,60 +12,64 @@ local SKINS = {
     }
 }
 
-local function applyFakeVisual(part, skinData)
-    if not part or processed[part] then return end
-    processed[part] = true
-
-    -- Шукаємо SpecialMesh
-    local mesh = part:FindFirstChildOfClass("SpecialMesh")
-    if mesh then
-        mesh.MeshId = skinData.MeshId
-        mesh.TextureId = skinData.TextureId
-    end
-
-    -- Захист від CharacterClient (постійно тримаємо видимість)
-    task.spawn(function()
-        while part and part.Parent do
-            if part:IsA("BasePart") then
-                part.LocalTransparencyModifier = 0
-                part.Transparency = 0
-            end
-            task.wait(0.2)
+local function applySkinToModel(model, skinData)
+    if not model then return end
+    
+    for _, desc in ipairs(model:GetDescendants()) do
+        if desc:IsA("SpecialMesh") then
+            desc.MeshId = skinData.MeshId
+            desc.TextureId = skinData.TextureId
+        elseif desc:IsA("MeshPart") then
+            desc.MeshId = skinData.MeshId
+            desc.TextureID = skinData.TextureId
         end
-    end)
+
+        if desc:IsA("BasePart") then
+            desc.LocalTransparencyModifier = 0
+            desc.Transparency = 0
+        end
+    end
 end
 
-local function handleChild(child)
-    if child:IsA("ObjectValue") and child.Value then
-        if child.Name == "DisplayRefKnife" then
-            applyFakeVisual(child.Value, SKINS.Knife)
-        elseif child.Name == "DisplayRefGun" then
-            applyFakeVisual(child.Value, SKINS.Gun)
+local function checkAndApply(child)
+    -- 1. Перевірка зброї на кобурі/спині (DisplayRef)
+    if child:IsA("ObjectValue") then
+        if child.Name == "DisplayRefKnife" and child.Value then
+            applySkinToModel(child.Value, SKINS.Knife)
+        elseif child.Name == "DisplayRefGun" and child.Value then
+            applySkinToModel(child.Value, SKINS.Gun)
         end
+        
+        child:GetPropertyChangedSignal("Value"):Connect(function()
+            if child.Value then
+                local data = (child.Name == "DisplayRefGun") and SKINS.Gun or SKINS.Knife
+                applySkinToModel(child.Value, data)
+            end
+        end)
+        
+    -- 2. Перевірка зброї, коли ти взяв її в руки
     elseif child:IsA("Tool") then
         local name = child.Name:lower()
-        local handle = child:FindFirstChild("Handle") or child:FindFirstChildOfClass("Part")
-        if handle then
-            if name:find("knife") or child:HasTag("Weapon_Knife") then
-                applyFakeVisual(handle, SKINS.Knife)
-            elseif name:find("gun") or name:find("revolver") or child:HasTag("Weapon_Gun") then
-                applyFakeVisual(handle, SKINS.Gun)
-            end
+        if name:find("knife") or child:FindFirstChild("KnifeServer") then
+            applySkinToModel(child, SKINS.Knife)
+        elseif name:find("gun") or name:find("revolver") or child:FindFirstChild("GunServer") then
+            applySkinToModel(child, SKINS.Gun)
         end
     end
 end
 
 local function setupCharacter(char)
-    table.clear(processed)
-    
-    char.ChildAdded:Connect(function(child)
-        task.defer(function() handleChild(child) end)
-    end)
-    
+    -- Обробка того, що вже є в персонажі
     for _, child in ipairs(char:GetChildren()) do
-        handleChild(child)
+        checkAndApply(child)
     end
+    
+    -- Відстеження нових предметів (коли взяв зброю в руки)
+    char.ChildAdded:Connect(checkAndApply)
 end
 
-if LocalPlayer.Character then setupCharacter(LocalPlayer.Character) end
+if LocalPlayer.Character then 
+    setupCharacter(LocalPlayer.Character) 
+end
+
 LocalPlayer.CharacterAdded:Connect(setupCharacter)
