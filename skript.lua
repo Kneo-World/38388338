@@ -6,7 +6,7 @@ local LocalPlayer = Players.LocalPlayer
 local ProfileData = require(ReplicatedStorage.Modules.ProfileData)
 local InventoryModule = require(ReplicatedStorage.Modules.InventoryModule)
 
--- База мешей и текстур MM2 (с правильным форматом rbxassetid://)
+-- База данных скинов с прямыми ссылками на MeshId и TextureId
 local WeaponDatabase = {
     ["Icebreaker"] = {MeshId = "rbxassetid://6022874136", TextureId = "rbxassetid://6022874251"},
     ["Harvester"] = {MeshId = "rbxassetid://7800847534", TextureId = "rbxassetid://7800847683"},
@@ -39,28 +39,38 @@ if InventoryModule.MyInventory then
     InventoryModule.ConnectEquipButtons()
 end
 
--- Функция принудительной установки меша и текстуры
+-- Универсальная функция подмены меша (ищет объект Mesh внутри парта)
 local function applyMeshToObj(obj, data)
     if not obj or not data then return end
 
     local targetPart = obj:IsA("BasePart") and obj or obj:FindFirstChild("Handle") or obj:FindFirstChildWhichIsA("BasePart", true)
     if not targetPart then return end
 
+    -- Если сам объект является MeshPart
     if targetPart:IsA("MeshPart") then
         targetPart.MeshId = data.MeshId
         if data.TextureId then targetPart.TextureID = data.TextureId end
+        return
+    end
+
+    -- Поиск внутреннего объекта Mesh (как у GunDisplay/KnifeDisplay на твоем скрине)
+    local innerMesh = targetPart:FindFirstChild("Mesh") 
+        or targetPart:FindFirstChildOfClass("SpecialMesh") 
+        or targetPart:FindFirstChildWhichIsA("DataModelMesh")
+    
+    if innerMesh then
+        innerMesh.MeshId = data.MeshId
+        if data.TextureId then innerMesh.TextureId = data.TextureId end
     else
-        local mesh = targetPart:FindFirstChildOfClass("SpecialMesh")
-        if not mesh then
-            mesh = Instance.new("SpecialMesh")
-            mesh.Parent = targetPart
-        end
-        mesh.MeshId = data.MeshId
-        if data.TextureId then mesh.TextureId = data.TextureId end
+        local newMesh = Instance.new("SpecialMesh")
+        newMesh.Name = "Mesh"
+        newMesh.MeshId = data.MeshId
+        if data.TextureId then newMesh.TextureId = data.TextureId end
+        newMesh.Parent = targetPart
     end
 end
 
--- Получение надетого скина из ProfileData
+-- Получение текущего надетого скина из ProfileData
 local function getEquippedSkin(category)
     local equipped = ProfileData.Weapons and ProfileData.Weapons.Equipped
     if not equipped then return nil end
@@ -72,15 +82,17 @@ local function getEquippedSkin(category)
     return nil
 end
 
--- Проверка принадлежит ли WeaponDisplay твоему персонажу
+-- Проверка привязки дисплея на теле к твоему персонажу через Constraint/Weld
 local function isMyDisplay(displayObj)
-    if not LocalPlayer.Character then return false end
+    local char = LocalPlayer.Character
+    if not char then return false end
 
-    -- Поиск Weld / WeldConstraint, привязанного к твоему персонажу
     for _, descendant in ipairs(displayObj:GetDescendants()) do
-        if descendant:IsA("Weld") or descendant:IsA("WeldConstraint") then
-            if (descendant.Part0 and descendant.Part0:IsDescendantOf(LocalPlayer.Character)) or
-               (descendant.Part1 and descendant.Part1:IsDescendantOf(LocalPlayer.Character)) then
+        if descendant:IsA("RigidConstraint") or descendant:IsA("Weld") or descendant:IsA("WeldConstraint") then
+            local p0 = descendant:IsA("RigidConstraint") and descendant.Attachment0 or descendant.Part0
+            local p1 = descendant:IsA("RigidConstraint") and descendant.Attachment1 or descendant.Part1
+            
+            if (p0 and p0:IsDescendantOf(char)) or (p1 and p1:IsDescendantOf(char)) then
                 return true
             end
         end
@@ -88,7 +100,7 @@ local function isMyDisplay(displayObj)
     return false
 end
 
--- Обновление визуала
+-- Полная перерисовка визуала
 local function refreshVisuals()
     local char = LocalPlayer.Character
     if not char then return end
@@ -99,7 +111,7 @@ local function refreshVisuals()
     local knifeData = WeaponDatabase[knifeSkin]
     local gunData = WeaponDatabase[gunSkin]
 
-    -- A. Оружие в руках (Tool)
+    -- 1. Нож / Пистолет в руках (Tool)
     for _, item in ipairs(char:GetChildren()) do
         if item:IsA("Tool") then
             local handle = item:FindFirstChild("Handle")
@@ -113,7 +125,7 @@ local function refreshVisuals()
         end
     end
 
-    -- B. Оружие на теле (в workspace.WeaponDisplays)
+    -- 2. Нож / Пистолет за спиной или на поясе (Workspace.WeaponDisplays)
     local weaponDisplaysFolder = Workspace:FindFirstChild("WeaponDisplays")
     if weaponDisplaysFolder then
         for _, display in ipairs(weaponDisplaysFolder:GetChildren()) do
@@ -128,7 +140,7 @@ local function refreshVisuals()
     end
 end
 
--- Подключение к персонажу и папке WeaponDisplays
+-- Настройка слушателей событий
 local function setupListeners()
     local function connectChar(char)
         char.ChildAdded:Connect(function(child)
@@ -153,7 +165,7 @@ end
 
 setupListeners()
 
--- Постоянное обновление при смене в инвентаре
+-- Автоматическое обновление при выборе в меню
 task.spawn(function()
     while task.wait(0.3) do
         refreshVisuals()
