@@ -5,19 +5,29 @@ local LocalPlayer = Players.LocalPlayer
 local ProfileData = require(ReplicatedStorage.Modules.ProfileData)
 local InventoryModule = require(ReplicatedStorage.Modules.InventoryModule)
 
--- Список скінів для додавання
-local skinsToAdd = {
-    "Icebreaker", "Harvester", "Icepiercer", "Bat", "Candyleaf",
-    "Corrupt", "Nikilis", "Lugercane", "ChromaLuger", "Amerikatan",
-    "Pixel", "Slasher", "Bioblade", "Prismatic", "Db"
+-- База данных скинченджера (MeshID & TextureID)
+local WeaponDatabase = {
+    ["Icebreaker"] = {MeshId = "rbxassetid://6022874136", TextureId = "rbxassetid://6022874251", Type = "Knife"},
+    ["Harvester"] = {MeshId = "rbxassetid://7800847534", TextureId = "rbxassetid://7800847683", Type = "Gun"},
+    ["Icepiercer"] = {MeshId = "rbxassetid://11834434264", TextureId = "rbxassetid://11834434400", Type = "Gun"},
+    ["Bat"] = {MeshId = "rbxassetid://11229779932", TextureId = "rbxassetid://11229780100", Type = "Knife"},
+    ["Corrupt"] = {MeshId = "rbxassetid://197879343", TextureId = "rbxassetid://197879357", Type = "Knife"},
+    ["Nikilis"] = {MeshId = "rbxassetid://3184125538", TextureId = "rbxassetid://3184125700", Type = "Knife"},
+    ["Lugercane"] = {MeshId = "rbxassetid://4488391411", TextureId = "rbxassetid://4488391550", Type = "Gun"},
+    ["ChromaLuger"] = {MeshId = "rbxassetid://332044679", TextureId = "rbxassetid://332044810", Type = "Gun"},
+    ["Pixel"] = {MeshId = "rbxassetid://235381341", TextureId = "rbxassetid://235381480", Type = "Knife"},
+    ["Slasher"] = {MeshId = "rbxassetid://3187392501", TextureId = "rbxassetid://3187392650", Type = "Knife"},
+    ["Bioblade"] = {MeshId = "rbxassetid://4659627458", TextureId = "rbxassetid://4659627600", Type = "Knife"},
+    ["Prismatic"] = {MeshId = "rbxassetid://5360359935", TextureId = "rbxassetid://5360360080", Type = "Knife"},
+    ["Db"] = {MeshId = "rbxassetid://4749071819", TextureId = "rbxassetid://4749071980", Type = "Gun"}
 }
 
--- 1. Видаємо скіни
-for _, skinID in ipairs(skinsToAdd) do
+-- 1. Выдаем скины в инвентарь MM2
+for skinID, _ in pairs(WeaponDatabase) do
     ProfileData.Weapons.Owned[skinID] = (ProfileData.Weapons.Owned[skinID] or 0) + 1
 end
 
--- 2. Оновлюємо GUI
+-- 2. Обновляем GUI инвентаря
 if InventoryModule.MyInventory then
     InventoryModule.MyInventory = InventoryModule.GenerateInventory(
         InventoryModule.GUI.MyInventory, 
@@ -28,24 +38,27 @@ if InventoryModule.MyInventory then
     InventoryModule.ConnectEquipButtons()
 end
 
--- Гнучкий пошук моделі в ReplicatedStorage
-local function findWeaponModel(skinName)
-    if not skinName then return nil end
-    local cleanName = string.lower(skinName)
+-- Функция смены визуального меша детали
+local function applySkinToPart(targetPart, skinData)
+    if not targetPart or not skinData then return end
 
-    for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
-        if obj:IsA("Model") or obj:IsA("BasePart") or obj:IsA("Tool") then
-            local objName = string.lower(obj.Name)
-            if objName == cleanName or objName == "knife_" .. cleanName or objName == "gun_" .. cleanName then
-                return obj
-            end
+    local mesh = targetPart:FindFirstChildOfClass("SpecialMesh")
+    
+    if targetPart:IsA("MeshPart") then
+        if skinData.MeshId then targetPart.MeshId = skinData.MeshId end
+        if skinData.TextureId then targetPart.TextureID = skinData.TextureId end
+    else
+        if not mesh then
+            mesh = Instance.new("SpecialMesh")
+            mesh.Parent = targetPart
         end
+        if skinData.MeshId then mesh.MeshId = skinData.MeshId end
+        if skinData.TextureId then mesh.TextureId = skinData.TextureId end
     end
-    return nil
 end
 
--- Отримання поточної екіпірованої зброї з ProfileData
-local function getEquippedSkin(category) -- "Knife" або "Gun"
+-- Получение экипированного скина из ProfileData
+local function getEquippedSkinName(category)
     local equipped = ProfileData.Weapons and ProfileData.Weapons.Equipped
     if not equipped then return nil end
 
@@ -56,92 +69,55 @@ local function getEquippedSkin(category) -- "Knife" або "Gun"
     return nil
 end
 
--- Заміна візуалу в конкретній Part / Handle
-local function swapVisuals(targetPart, sourceModel)
-    if not targetPart or not sourceModel then return end
-
-    -- Пошук меша у джерелі
-    local sourceMesh = sourceModel:FindFirstChildOfClass("SpecialMesh") or (sourceModel:IsA("MeshPart") and sourceModel)
-    if not sourceMesh then
-        sourceMesh = sourceModel:FindFirstChildWhichIsA("BasePart", true)
-    end
-
-    if not sourceMesh then return end
-
-    -- Пошук або створення SpecialMesh у цілі
-    local targetMesh = targetPart:FindFirstChildOfClass("SpecialMesh")
-    if not targetMesh and not targetPart:IsA("MeshPart") then
-        targetMesh = Instance.new("SpecialMesh", targetPart)
-    end
-
-    -- Копіювання параметрів
-    if sourceMesh:IsA("SpecialMesh") and targetMesh then
-        targetMesh.MeshId = sourceMesh.MeshId
-        targetMesh.TextureId = sourceMesh.TextureId
-        targetMesh.Scale = sourceMesh.Scale
-    elseif sourceMesh:IsA("MeshPart") then
-        if targetPart:IsA("MeshPart") then
-            targetPart.MeshId = sourceMesh.MeshId
-            targetPart.TextureID = sourceMesh.TextureID
-        elseif targetMesh then
-            targetMesh.MeshId = sourceMesh.MeshId
-            targetMesh.TextureId = sourceMesh.TextureID
-        end
-    end
-
-    -- Копіювання кольору та текстури
-    targetPart.Color = sourceMesh.Color
-    targetPart.Material = sourceMesh.Material
-end
-
--- Оновлення кобури / спини та інструменту в руках
+-- Обновление моделей у персонажа (кобура на теле + оружие в руках)
 local function refreshVisuals()
     local char = LocalPlayer.Character
     if not char then return end
 
-    local knifeSkin = getEquippedSkin("Knife")
-    local gunSkin = getEquippedSkin("Gun")
+    local equippedKnife = getEquippedSkinName("Knife")
+    local equippedGun = getEquippedSkinName("Gun")
 
-    -- 1. Спина / Пояс (DisplayRef)
+    local knifeData = WeaponDatabase[equippedKnife]
+    local gunData = WeaponDatabase[equippedGun]
+
+    -- 1. Отображение на теле (кобура / спина)
     local refKnife = char:FindFirstChild("DisplayRefKnife")
-    if refKnife and refKnife.Value and knifeSkin then
-        local model = findWeaponModel(knifeSkin)
-        if model then swapVisuals(refKnife.Value, model) end
+    if refKnife and refKnife.Value and knifeData then
+        applySkinToPart(refKnife.Value, knifeData)
     end
 
     local refGun = char:FindFirstChild("DisplayRefGun")
-    if refGun and refGun.Value and gunSkin then
-        local model = findWeaponModel(gunSkin)
-        if model then swapVisuals(refGun.Value, model) end
+    if refGun and refGun.Value and gunData then
+        applySkinToPart(refGun.Value, gunData)
     end
 
-    -- 2. Зброя в руках (Tool)
-    for _, item in ipairs(char:GetChildren()) do
-        if item:IsA("Tool") then
-            local handle = item:FindFirstChild("Handle")
+    -- 2. Предмет в руках (Tool)
+    for _, child in ipairs(char:GetChildren()) do
+        if child:IsA("Tool") then
+            local handle = child:FindFirstChild("Handle")
             if handle then
-                if (item.Name == "Knife" or item:FindFirstChild("Knife")) and knifeSkin then
-                    local model = findWeaponModel(knifeSkin)
-                    if model then swapVisuals(handle, model) end
-                elseif (item.Name == "Gun" or item:FindFirstChild("Gun")) and gunSkin then
-                    local model = findWeaponModel(gunSkin)
-                    if model then swapVisuals(handle, model) end
+                -- Если держим нож
+                if (child.Name == "Knife" or child:FindFirstChild("Knife")) and knifeData then
+                    applySkinToPart(handle, knifeData)
+                -- Если держим пистолет
+                elseif (child.Name == "Gun" or child:FindFirstChild("Gun")) and gunData then
+                    applySkinToPart(handle, gunData)
                 end
             end
         end
     end
 end
 
--- 3. Підключення до персонажа
+-- 3. Подключение обработчиков персонажа
 local function setupCharacter(char)
     char.ChildAdded:Connect(function(child)
         if child:IsA("Tool") or child.Name:find("DisplayRef") then
-            task.wait(0.1)
+            task.wait(0.05)
             refreshVisuals()
         end
     end)
     task.spawn(function()
-        task.wait(0.3)
+        task.wait(0.2)
         refreshVisuals()
     end)
 end
@@ -149,9 +125,9 @@ end
 if LocalPlayer.Character then setupCharacter(LocalPlayer.Character) end
 LocalPlayer.CharacterAdded:Connect(setupCharacter)
 
--- Авто-оновлення при зміні вибору в GUI
+-- Постоянное отслеживание изменений смены скина в GUI
 task.spawn(function()
-    while task.wait(0.5) do
+    while task.wait(0.3) do
         refreshVisuals()
     end
 end)
