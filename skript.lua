@@ -1,45 +1,41 @@
--- Visual Skin Changer for MM2
+print("[DEBUG 1] Скрипт запущен!")
+
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
--- НАСТРОЙКИ (замени ID на нужные):
-local TARGET_TOOL_NAME = "Default Knife" -- Название ножа/пушки, который у тебя ЕСТЬ в инвентаре
-local NEW_NAME = "Chroma Deathshard"     -- Новое название (визуально)
-local NEW_TEXTURE_ID = "rbxassetid://241513681" -- ID текстуры нужного скина
+if not LocalPlayer then
+    print("[DEBUG ERROR] LocalPlayer не найден!")
+    return
+end
 
-local function applyVisuals(tool)
-    if tool:IsA("Tool") and tool.Name == TARGET_TOOL_NAME then
-        -- Менявшем название
-        tool.Name = NEW_NAME
+print("[DEBUG 2] Игрок найден:", LocalPlayer.Name)
+
+-- Функция для отслеживания инвентаря/GUI
+local function debugGUI()
+    print("[DEBUG 3] Ищем PlayerGui...")
+    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+    
+    if not playerGui then
+        print("[DEBUG WARNING] PlayerGui еще не загрузился, ждем...")
+        playerGui = LocalPlayer:WaitForChild("PlayerGui", 5)
+    end
+
+    if playerGui then
+        print("[DEBUG 4] PlayerGui успешно найден!")
         
-        -- Меняем текстуру иконки в инвентаре
-        tool.TextureId = NEW_TEXTURE_ID
-        
-        -- Меняем текстуру на самой 3D-модели ножа
-        for _, child in ipairs(tool:GetDescendants()) do
-            if child:IsA("MeshPart") or child:IsA("SpecialMesh") then
-                child.TextureId = NEW_TEXTURE_ID
-            elseif child:IsA("Decal") then
-                child.Texture = NEW_TEXTURE_ID
-            end
+        -- Проверка наличия элементов MM2 (например, MainGUI / Shop / Inventory)
+        for _, child in ipairs(playerGui:GetChildren()) do
+            print("[DEBUG GUI Element]:", child.Name)
         end
+    else
+        print("[DEBUG ERROR] PlayerGui так и не появился!")
     end
 end
 
--- Проверяем инвентарь (Backpack)
-for _, item in ipairs(LocalPlayer.Backpack:GetChildren()) do
-    applyVisuals(item)
-end
+-- Запуск проверки
+task.spawn(function()
+    print("[DEBUG 5] Старт потока проверки...")
+    debugGUI()
+end)
 
--- Проверяем, если предмет уже заспавнился в персонаже (в руках)
-if LocalPlayer.Character then
-    for _, item in ipairs(LocalPlayer.Character:GetChildren()) do
-        applyVisuals(item)
-    end
-end
-
--- Отслеживаем появление новых предметов
-LocalPlayer.Backpack.ChildAdded:Connect(applyVisuals)
-if LocalPlayer.Character then
-    LocalPlayer.Character.ChildAdded:Connect(applyVisuals)
-end
+print("[DEBUG 6] Скрипт полностью инициализирован.")
