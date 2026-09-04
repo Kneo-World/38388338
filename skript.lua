@@ -1,7 +1,7 @@
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
--- База даних скінів MM2 (MeshId та TextureId)
+-- База даних скінів MM2
 local SkinsDB = {
     Guns = {
         Luger = {Mesh = "rbxassetid://3187399148", Texture = "rbxassetid://3187399148"},
@@ -31,14 +31,12 @@ local SkinsDB = {
     }
 }
 
--- ОБЕРИ ОБРАНІ СКІНИ ТУТ (вкажи назву з бази вище):
+-- Обрані скіни
 local SELECTED_GUN = SkinsDB.Guns.Luger
 local SELECTED_KNIFE = SkinsDB.Knives.Deathshard
 
--- Функція для підміни сітки та текстури
 local function applyMeshAndTexture(parentObj, meshId, textureId)
     if not parentObj or not meshId then return end
-    
     for _, obj in ipairs(parentObj:GetDescendants()) do
         if obj:IsA("SpecialMesh") then
             obj.MeshId = meshId
@@ -50,9 +48,7 @@ local function applyMeshAndTexture(parentObj, meshId, textureId)
     end
 end
 
--- Патчер персонажа
 local function patchCharacter(char)
-    -- 1. Відстежуємо пояси на LowerTorso
     local lowerTorso = char:WaitForChild("LowerTorso", 5)
     if lowerTorso then
         lowerTorso.ChildAdded:Connect(function(child)
@@ -64,7 +60,6 @@ local function patchCharacter(char)
         end)
     end
 
-    -- 2. Відстежуємо зброю в руках (Tool)
     char.ChildAdded:Connect(function(child)
         if child:IsA("Tool") then
             local name = child.Name:lower()
@@ -75,8 +70,7 @@ local function patchCharacter(char)
             end
         end
     end)
-    
-    -- 3. Аксесуари на спині/поясі
+
     for _, acc in ipairs(char:GetChildren()) do
         if acc:IsA("Accessory") then
             local name = acc.Name:lower()
