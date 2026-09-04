@@ -31,10 +31,11 @@ local SkinsDB = {
     }
 }
 
--- Обрані скіни
+-- Початковий вибір
 local SELECTED_GUN = SkinsDB.Guns.Luger
 local SELECTED_KNIFE = SkinsDB.Knives.Deathshard
 
+-- Заміна меша і текстури
 local function applyMeshAndTexture(parentObj, meshId, textureId)
     if not parentObj or not meshId then return end
     for _, obj in ipairs(parentObj:GetDescendants()) do
@@ -48,6 +49,54 @@ local function applyMeshAndTexture(parentObj, meshId, textureId)
     end
 end
 
+-- Сканування та оновлення конкретного об'єкта
+local function processObject(obj)
+    local name = obj.Name:lower()
+    
+    if obj:IsA("Tool") then
+        if name:find("gun") or name:find("revolver") then
+            applyMeshAndTexture(obj, SELECTED_GUN.Mesh, SELECTED_GUN.Texture)
+        elseif name:find("knife") then
+            applyMeshAndTexture(obj, SELECTED_KNIFE.Mesh, SELECTED_KNIFE.Texture)
+        end
+    elseif obj:IsA("Accessory") then
+        if name:find("gun") then
+            applyMeshAndTexture(obj, SELECTED_GUN.Mesh, SELECTED_GUN.Texture)
+        elseif name:find("knife") then
+            applyMeshAndTexture(obj, SELECTED_KNIFE.Mesh, SELECTED_KNIFE.Texture)
+        end
+    end
+end
+
+-- Оновлення скінів на всьому персонажі та в рюкзаку
+local function updateAllSkins()
+    local char = LocalPlayer.Character
+    if char then
+        for _, child in ipairs(char:GetChildren()) do
+            processObject(child)
+        end
+        
+        local lowerTorso = char:FindFirstChild("LowerTorso")
+        if lowerTorso then
+            for _, child in ipairs(lowerTorso:GetChildren()) do
+                if child.Name == "GunBelt" or child.Name:find("Gun") then
+                    applyMeshAndTexture(child, SELECTED_GUN.Mesh, SELECTED_GUN.Texture)
+                elseif child.Name == "KnifeBelt" or child.Name:find("Knife") then
+                    applyMeshAndTexture(child, SELECTED_KNIFE.Mesh, SELECTED_KNIFE.Texture)
+                end
+            end
+        end
+    end
+
+    local backpack = LocalPlayer:FindFirstChild("Backpack")
+    if backpack then
+        for _, tool in ipairs(backpack:GetChildren()) do
+            processObject(tool)
+        end
+    end
+end
+
+-- Підключення слухачів до персонажа
 local function patchCharacter(char)
     local lowerTorso = char:WaitForChild("LowerTorso", 5)
     if lowerTorso then
@@ -61,28 +110,23 @@ local function patchCharacter(char)
     end
 
     char.ChildAdded:Connect(function(child)
-        if child:IsA("Tool") then
-            local name = child.Name:lower()
-            if name:find("gun") or name:find("revolver") then
-                applyMeshAndTexture(child, SELECTED_GUN.Mesh, SELECTED_GUN.Texture)
-            elseif name:find("knife") then
-                applyMeshAndTexture(child, SELECTED_KNIFE.Mesh, SELECTED_KNIFE.Texture)
-            end
-        end
+        processObject(child)
     end)
 
-    for _, acc in ipairs(char:GetChildren()) do
-        if acc:IsA("Accessory") then
-            local name = acc.Name:lower()
-            if name:find("gun") then
-                applyMeshAndTexture(acc, SELECTED_GUN.Mesh, SELECTED_GUN.Texture)
-            elseif name:find("knife") then
-                applyMeshAndTexture(acc, SELECTED_KNIFE.Mesh, SELECTED_KNIFE.Texture)
-            end
-        end
-    end
+    updateAllSkins()
 end
 
+-- Глобальна функція для зміни скінів (викликай її з GUI або з коду)
+_G.SetSkin = function(category, skinData)
+    if category == "Gun" or category == "Guns" then
+        SELECTED_GUN = skinData
+    elseif category == "Knife" or category == "Knives" then
+        SELECTED_KNIFE = skinData
+    end
+    updateAllSkins()
+end
+
+-- Ініціалізація
 if LocalPlayer.Character then
     patchCharacter(LocalPlayer.Character)
 end
