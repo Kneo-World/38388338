@@ -1,21 +1,25 @@
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
 local SKINS = {
     Gun = {
         MeshId = "rbxassetid://3187399148",
-        TextureId = "rbxassetid://3187399222"
+        TextureId = "rbxassetid://3187399222",
+        Name = "Luger"
     },
     Knife = {
         MeshId = "rbxassetid://3175017717",
-        TextureId = "rbxassetid://3175017804"
+        TextureId = "rbxassetid://3175017804",
+        Name = "Deathshard"
     }
 }
 
-local function applySkinToModel(model, skinData)
-    if not model then return end
+local function patchViewportFrame(vpf, skinData)
+    if not vpf then return end
     
-    for _, desc in ipairs(model:GetDescendants()) do
+    -- Шукаємо 3D модель усередині ViewportFrame
+    for _, desc in ipairs(vpf:GetDescendants()) do
         if desc:IsA("SpecialMesh") then
             desc.MeshId = skinData.MeshId
             desc.TextureId = skinData.TextureId
@@ -23,53 +27,46 @@ local function applySkinToModel(model, skinData)
             desc.MeshId = skinData.MeshId
             desc.TextureID = skinData.TextureId
         end
-
-        if desc:IsA("BasePart") then
-            desc.LocalTransparencyModifier = 0
-            desc.Transparency = 0
-        end
     end
 end
 
-local function checkAndApply(child)
-    -- 1. Перевірка зброї на кобурі/спині (DisplayRef)
-    if child:IsA("ObjectValue") then
-        if child.Name == "DisplayRefKnife" and child.Value then
-            applySkinToModel(child.Value, SKINS.Knife)
-        elseif child.Name == "DisplayRefGun" and child.Value then
-            applySkinToModel(child.Value, SKINS.Gun)
-        end
-        
-        child:GetPropertyChangedSignal("Value"):Connect(function()
-            if child.Value then
-                local data = (child.Name == "DisplayRefGun") and SKINS.Gun or SKINS.Knife
-                applySkinToModel(child.Value, data)
-            end
-        end)
-        
-    -- 2. Перевірка зброї, коли ти взяв її в руки
-    elseif child:IsA("Tool") then
-        local name = child.Name:lower()
-        if name:find("knife") or child:FindFirstChild("KnifeServer") then
-            applySkinToModel(child, SKINS.Knife)
-        elseif name:find("gun") or name:find("revolver") or child:FindFirstChild("GunServer") then
-            applySkinToModel(child, SKINS.Gun)
-        end
-    end
-end
-
-local function setupCharacter(char)
-    -- Обробка того, що вже є в персонажі
-    for _, child in ipairs(char:GetChildren()) do
-        checkAndApply(child)
-    end
+local function patchInventorySlot(frame)
+    local nameContainer = frame:FindFirstChild("ItemName") or frame:FindFirstChild("Title") or frame:FindFirstChildOfClass("TextLabel")
+    local vpf = frame:FindFirstChildOfClass("ViewportFrame") or frame:FindFirstChild("ItemViewport", true)
     
-    -- Відстеження нових предметів (коли взяв зброю в руки)
-    char.ChildAdded:Connect(checkAndApply)
+    local isKnife = frame.Name:lower():find("knife") or (nameContainer and nameContainer.Text:lower():find("knife"))
+    local isGun = frame.Name:lower():find("gun") or (nameContainer and nameContainer.Text:lower():find("gun"))
+
+    if isKnife and vpf then
+        patchViewportFrame(vpf, SKINS.Knife)
+        if nameContainer then nameContainer.Text = SKINS.Knife.Name end
+    elseif isGun and vpf then
+        patchViewportFrame(vpf, SKINS.Gun)
+        if nameContainer then nameContainer.Text = SKINS.Gun.Name end
+    end
 end
 
-if LocalPlayer.Character then 
-    setupCharacter(LocalPlayer.Character) 
+local function scanGui()
+    local mainGui = PlayerGui:FindFirstChild("MainGUI") or PlayerGui:FindFirstChild("GameGUI") or PlayerGui:FindFirstChildOfClass("ScreenGui")
+    if not mainGui then return end
+
+    -- Пошук усіх слотів зброї в GUI (як у списку, так і на панелі справа)
+    for _, desc in ipairs(mainGui:GetDescendants()) do
+        if desc:IsA("Frame") or desc:IsA("ImageButton") then
+            if desc:FindFirstChildOfClass("ViewportFrame") then
+                patchInventorySlot(desc)
+            end
+        end
+    end
 end
 
-LocalPlayer.CharacterAdded:Connect(setupCharacter)
+-- Автоматично оновлюємо при відкритті GUI або зміні предметів
+PlayerGui.DescendantAdded:Connect(function(desc)
+    if desc:IsA("ViewportFrame") then
+        task.wait(0.1)
+        if desc.Parent then patchInventorySlot(desc.Parent) end
+    end
+end)
+
+-- Запускаємо сканування
+scanGui()
